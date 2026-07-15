@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assistant Q&R — Panel SenReact</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #070c09; --panel: #0d1410; --ink: #f2f5f3; --muted: #8fa69a;
+    --grn: #38d07e; --grn-dim: #1e7a4c; --org: #f5a623;
+    --card: rgba(255,255,255,0.045); --line: rgba(255,255,255,0.10);
+  }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ===== Barre du haut ===== */
+  header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel);
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 1.05rem; font-weight: 700; margin-right: auto; }
+  header h1 small { color: var(--muted); font-weight: 500; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); padding: 8px 14px; font-weight: 600;
+  }
+  button:hover { border-color: var(--grn-dim); }
+  button.primary { background: var(--grn-dim); border-color: var(--grn-dim); }
+  button.primary.on { background: var(--grn); color: #06130c; border-color: var(--grn); }
+  .pill {
+    font-size: 0.78rem; padding: 4px 10px; border-radius: 100px;
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  .pill.ok { color: var(--grn); border-color: var(--grn-dim); }
+  .pill.warn { color: var(--org); border-color: rgba(245,166,35,0.4); }
+
+  /* Vumètre micro */
+  #vu {
+    display: none; align-items: flex-end; gap: 3px; height: 24px;
+    padding: 0 4px;
+  }
+  #vu.on { display: flex; }
+  #vu span {
+    width: 5px; height: 4px; background: var(--grn); border-radius: 3px;
+    transition: height 0.07s linear;
+    box-shadow: 0 0 6px rgba(56,208,126,0.45);
+  }
+
+  /* ===== Corps ===== */
+  main { flex: 1; display: grid; grid-template-columns: minmax(280px, 34%) 1fr; min-height: 0; }
+
+  /* Transcript */
+  #left { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  #left .col-title, #right .col-title {
+    padding: 8px 14px; font-size: 0.72rem; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--muted); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center;
+  }
+  #transcript { flex: 1; overflow-y: auto; padding: 14px; font-size: 1.02rem; line-height: 1.65; }
+  #transcript .seg { color: var(--ink); }
+  #transcript .interim { color: var(--muted); font-style: italic; }
+  #manual {
+    display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line);
+  }
+  #manual input {
+    flex: 1; font: inherit; background: var(--card); border: 1px solid var(--line);
+    color: var(--ink); border-radius: 10px; padding: 9px 12px;
+  }
+  #manual input:focus { outline: none; border-color: var(--grn-dim); }
+
+  /* Cartes */
+  #right { display: flex; flex-direction: column; min-height: 0; }
+  #cards { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; animation: pop 0.35s ease;
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(14px); } }
+  .card.fact { border-left: 4px solid var(--grn); }
+  .card.ia { border-left: 4px solid var(--org); }
+  .card .tag {
+    font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 700;
+  }
+  .card.fact .tag { color: var(--grn); }
+  .card.ia .tag { color: var(--org); }
+  .card h3 { font-size: 1.12rem; margin: 6px 0 4px; line-height: 1.3; }
+  .card .big { font-size: 1.6rem; font-weight: 800; color: var(--grn); line-height: 1.15; }
+  .card p { font-size: 0.95rem; line-height: 1.5; margin-top: 5px; }
+  .card .src { margin-top: 8px; font-size: 0.82rem; color: var(--muted); }
+  .card .src strong { color: var(--ink); }
+  .card ul { margin: 6px 0 0 18px; font-size: 0.95rem; line-height: 1.55; }
+  .card a { color: var(--grn); text-decoration: none; }
+  .card a:hover { text-decoration: underline; }
+  .card .caution { margin-top: 8px; font-size: 0.85rem; color: var(--org); }
+  .card .xsrc {
+    margin-top: 10px; font-size: 0.82rem; padding: 5px 12px;
+  }
+  .xs-box { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+  .xs-box ul { list-style: none; margin: 6px 0 0; }
+  .xs-box li { font-size: 0.86rem; line-height: 1.5; margin-top: 4px; }
+  .xs-badge {
+    display: inline-block; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.06em;
+    padding: 1px 7px; border-radius: 100px; border: 1px solid var(--line);
+    color: var(--muted); margin-right: 6px; vertical-align: 1px;
+  }
+  .xs-warn { font-size: 0.78rem; color: var(--org); }
+  .xs-d { color: var(--muted); font-size: 0.9em; }
+  .xs-links { margin-top: 8px; font-size: 0.8rem; color: var(--muted); }
+  .xs-load { color: var(--muted); font-size: 0.85rem; }
+  #empty { color: var(--muted); text-align: center; margin-top: 8vh; font-size: 0.95rem; line-height: 1.8; }
+
+  /* ===== Réglages ===== */
+  #settings {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 50;
+    align-items: center; justify-content: center;
+  }
+  #settings.open { display: flex; }
+  #settings .box {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    padding: 24px; width: min(560px, 92vw);
+  }
+  #settings h2 { font-size: 1.1rem; margin-bottom: 14px; }
+  #settings label { display: block; font-size: 0.85rem; color: var(--muted); margin: 12px 0 4px; }
+  #settings input[type=text], #settings input[type=password], #settings select {
+    width: 100%; font: inherit; background: var(--card); border: 1px solid var(--line);
+    color: var(--ink); border-radius: 10px; padding: 9px 12px;
+  }
+  #settings select option { background: var(--panel); }
+  #settings .row { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+  #settings .note { font-size: 0.8rem; color: var(--muted); margin-top: 12px; line-height: 1.5; }
+  /* ===== Diffusion en direct ===== */
+  #liveBar {
+    display: none; gap: 16px; align-items: center;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+    background: rgba(56,208,126,0.06);
+  }
+  #liveBar.on { display: flex; }
+  #liveBar img { width: 96px; height: 96px; border-radius: 8px; background: #fff; padding: 4px; flex: none; }
+  #liveBar .lb-txt { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+  #liveBar .lb-url { color: var(--grn); font-weight: 600; word-break: break-all; user-select: all; font-size: 0.82rem; }
+  .live-dot {
+    display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    background: #e74c3c; margin-right: 7px; animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+  body.viewer #left, body.viewer #btnMic, body.viewer #btnAnalyse, body.viewer #btnClear,
+  body.viewer #btnExport, body.viewer #btnSettings, body.viewer #btnLive,
+  body.viewer #pillMic, body.viewer #pillIA, body.viewer #vu { display: none !important; }
+  body.viewer main { grid-template-columns: 1fr; }
+  body.viewer .card .xsrc { display: none; }
+
+  #toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: #2b1a05; border: 1px solid rgba(245,166,35,0.5); color: var(--org);
+    padding: 10px 18px; border-radius: 100px; font-size: 0.9rem; display: none; z-index: 60;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Assistant Q&R <small>— appuis &amp; sources en direct</small></h1>
+  <span class="pill" id="pillMic">micro : off</span>
+  <div id="vu"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+  <span class="pill" id="pillIA">IA : non configurée</span>
+  <button class="primary" id="btnMic">🎙 Écouter</button>
+  <button class="primary" id="btnLive">📡 Direct</button>
+  <button id="btnAnalyse">⚡ Analyser maintenant</button>
+  <button id="btnClear">Effacer</button>
+  <button id="btnExport">Exporter</button>
+  <button id="btnSettings">⚙</button>
+</header>
+
+<main>
+  <section id="left">
+    <div class="col-title"><span>Transcription</span><span id="autoState"></span></div>
+    <div id="transcript"></div>
+    <form id="manual">
+      <input id="manualInput" type="text" placeholder="Ou tapez un sujet / une question et Entrée…" autocomplete="off">
+      <button type="submit">➤</button>
+    </form>
+  </section>
+  <section id="right">
+    <div id="liveBar">
+      <img id="lbQr" alt="QR code du direct">
+      <div class="lb-txt"><span class="live-dot"></span><strong style="color:var(--ink)">EN DIRECT</strong> — scannez pour suivre les réponses sur votre téléphone<br>
+      <span class="lb-url" id="lbUrl"></span></div>
+    </div>
+    <div class="col-title"><span>Appuis suggérés</span><span id="colHint">vert = vos faits sourcés · orange = analyse IA</span></div>
+    <div id="cards">
+      <div id="empty">Cliquez sur <strong>🎙 Écouter</strong> et parlez.<br>
+      Vos chiffres sourcés remontent automatiquement quand vous les évoquez.<br>
+      L'analyse IA suggère des appuis pour les questions imprévues,<br>
+      et croise automatiquement les sources (Wikipédia, GitHub, presse, web…).<br><br>
+      <em>Rappel : suggestions d'appuis, pas des verdicts — citez toujours la source, pas l'IA.</em></div>
+    </div>
+  </section>
+</main>
+
+<div id="settings">
+  <div class="box">
+    <h2>Réglages</h2>
+    <label>Clé(s) API — plusieurs clés séparées par des virgules = rotation automatique (round-robin)</label>
+    <input type="password" id="setKey" placeholder="gsk_xxx, gsk_yyy — même fournisseur pour toutes">
+    <label>URL de base de l'API (OpenAI, Groq ou tout fournisseur compatible)</label>
+    <input type="text" id="setBase" placeholder="https://api.openai.com/v1">
+    <label>Modèle d'analyse</label>
+    <input type="text" id="setModel" placeholder="gpt-4o-mini (OpenAI) · llama-3.3-70b-versatile (Groq)">
+    <label>Modèle de transcription</label>
+    <input type="text" id="setStt" placeholder="whisper-1 (OpenAI) · whisper-large-v3-turbo (Groq)">
+    <label>Clé Firecrawl (optionnel — ajoute la vraie recherche web au croisement de sources)</label>
+    <input type="password" id="setFc" placeholder="fc-… (firecrawl.dev, palier gratuit)">
+    <label>Clé Perplexity (optionnel — recherche web avec citations, quota gratuit)</label>
+    <input type="password" id="setPplx" placeholder="pplx-… (perplexity.ai/settings/api)">
+    <label>Transcription de la voix</label>
+    <select id="setEngine">
+      <option value="whisper">Whisper via API OpenAI — recommandé : une seule autorisation micro, jamais de popup répété</option>
+      <option value="chrome">Reconnaissance vocale Chrome — sans coût API, mais Chrome peut redemander le micro</option>
+    </select>
+    <div class="row">
+      <input type="checkbox" id="setAuto" checked>
+      <label for="setAuto" style="margin:0">Analyse automatique toutes les 30 s quand il y a du nouveau texte</label>
+    </div>
+    <div class="row">
+      <button class="primary" id="setSave">Enregistrer</button>
+      <button id="setClose">Fermer</button>
+    </div>
+    <p class="note">La clé ne quitte ce navigateur que vers l'URL de base configurée. Sans clé, le mode « faits sourcés »
+    (cartes vertes) fonctionne quand même, avec la reconnaissance vocale de Chrome.<br><br>
+    <strong>Préréglage Groq (gratuit)</strong> : URL <code>https://api.groq.com/openai/v1</code> · analyse
+    <code>openai/gpt-oss-120b</code> (ou <code>llama-3.3-70b-versatile</code>) · transcription <code>whisper-large-v3-turbo</code>.</p>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ================= PACK DE FAITS SOURCÉS (hors-ligne) ================= */
+/* Chaque fait : mots-clés déclencheurs (sans accents, minuscules), titre, chiffre, détail, source */
+const FACTS = [
+  { k: ['population mondiale','8 milliards','milliards d etres','habitants sur terre'],
+    t: 'Population mondiale', big: '8,2 milliards', p: "d'êtres humains sur Terre.",
+    s: 'ONU — World Population Prospects, 2024' },
+  { k: ['age median','19 ans','jeunesse africaine','afrique jeune','population jeune'],
+    t: 'Âge médian', big: '19 ans en Afrique', p: "contre ≈ 43 ans en Europe. L'Afrique est le continent le plus jeune du monde.",
+    s: 'ONU — World Population Prospects, 2024' },
+  { k: ['2050','un humain sur quatre','quart de l humanite','demographie 2050'],
+    t: 'Projection 2050', big: '1 humain sur 4', p: 'sera africain en 2050.',
+    s: 'ONU — projections démographiques, 2024' },
+  { k: ['senegal','senegalais','moins de 35','75 pour cent','rgph'],
+    t: 'Jeunesse sénégalaise', big: '75 % < 35 ans', p: 'Trois Sénégalais sur quatre ont moins de 35 ans (≈ 18 millions d\'habitants, âge médian ≈ 19 ans).',
+    s: 'ANSD — Recensement RGPH-5, 2023' },
+  { k: ['100 millions','cent millions','vitesse d adoption','deux mois','telephone 75'],
+    t: 'Course aux 100 millions d\'utilisateurs', big: 'ChatGPT : 2 mois',
+    p: 'Téléphone : 75 ans · Internet : 7 ans · Facebook : 4 ans ½ · ChatGPT : 2 mois.',
+    s: 'UBS / Reuters, 2023' },
+  { k: ['800 millions','utilisateurs par semaine','utilisateurs chatgpt','hebdomadaires'],
+    t: 'Usage actuel de ChatGPT', big: '≈ 800 M / semaine', p: "d'utilisateurs hebdomadaires revendiqués.",
+    s: 'OpenAI, 2025' },
+  { k: ['hallucination','hallucine','sources inventees','references inexistantes','se trompe'],
+    t: 'Hallucinations', big: 'Le vrai risque', p: "L'IA se trompe rarement, mais avec une assurance totale : sources inventées, chiffres faux, code cassé. D'où la méthode de contrôle.",
+    s: 'Votre scène 15-16 — le piège & la méthode' },
+  { k: ['controle base sur le risque','quatre regles','4 regles','verifier les sources','croiser plusieurs ia','tester le livrable','points critiques','audit'],
+    t: 'La méthode — 4 règles', big: 'Contrôler, pas produire',
+    p: '1. Exiger les sources et les ouvrir · 2. Croiser plusieurs IA · 3. Tester le livrable, pas le discours · 4. Vérifier les points critiques (contrôle basé sur le risque, comme en audit).',
+    s: 'Votre méthode — présentée scène 16' },
+  { k: ['medecin','hopital','congres','patiente','burnout','sante du personnel'],
+    t: 'Histoire — la médecin', big: 'Congrès en 1 séance',
+    p: '≈ 20 patients/jour ; recherches en exigeant les sources (OMS, revues), présentations et questionnaires d\'enquête générés — une communication de congrès construite en une séance de travail.',
+    s: 'Cas réel de coaching (anonymisé)' },
+  { k: ['deleguee medicale','pharmacienne','produit sans documentation','laboratoire','visite medicale'],
+    t: 'Histoire — la déléguée médicale', big: 'Des jours → quelques heures',
+    p: 'Seule déléguée du pays sur ses produits ; un nouveau produit reçu sans documentation → synthèse scientifique et argumentaire avec l\'IA, le bon vocabulaire face aux spécialistes.',
+    s: 'Cas réel de coaching (anonymisé) — « J\'ai pu vraiment dire les mots-clés devant les médecins »' },
+  { k: ['appels d offres','veille','developpeur','agent de veille','subventions','financements','21 sources'],
+    t: 'Histoire — le jeune développeur', big: '21 sources, lundi 11 h',
+    p: 'Agent de veille auto-construit : 21 sources scannées, filtres anti-hallucination, rapport automatique chaque lundi ; ≈ 50 opportunités analysées. Portfolio conçu et déployé en une journée.',
+    s: 'Cas réel de coaching (anonymisé)' },
+  { k: ['conformite','fintech','rapport hebdomadaire','taux de rejet','compliance'],
+    t: 'Histoire — la responsable conformité', big: 'Rapport du lundi automatisé',
+    p: "L'IA lit l'entrepôt de données et rédige le compte rendu hebdomadaire (taux de rejet par pays) ; elle contrôle et analyse. Généré pour la première fois pendant l'atelier.",
+    s: 'Cas réel de masterclass (anonymisé)' },
+  { k: ['senreact','sen react','plateforme','reseau des entrepreneurs','react'],
+    t: 'SenReact', big: 'Le lieu qui connecte',
+    p: 'Réseau des Entrepreneurs Actifs : réseau, opportunités et programmes, communautés, IA comme accélérateur. Ce qui demandait des années peut prendre quelques mois.',
+    s: 'senreact.com' },
+  { k: ['open source','partage','steinberger','openclaw','clawdbot','partager cree de la valeur','github'],
+    t: 'Le partage crée de la valeur', big: 'Open source',
+    p: 'Ex. Pete Steinberger : assistant IA publié en open source, puis recruté/racheté par OpenAI. Joon Sung Park : « Generative Agents » (Stanford, 2023) publié avec son code, devenu une référence. La méthode de cette présentation est elle-même sur GitHub (QR final).',
+    s: 'github.com/jniox/presentation-web-scroll-html-autonome' },
+  { k: ['emploi','remplacer','chomage','metiers menaces','travail'],
+    t: 'IA et emploi — votre angle', big: 'Collaborer, pas subir',
+    p: '« Ceux qui apprendront à collaborer avec l\'IA remplaceront ceux qui refusent de l\'utiliser. » Le savoir est disponible ; la différence devient le jugement et la méthode.',
+    s: 'Votre fil conducteur' },
+  { k: ['chef de projet','pmp','prince2','gestion de projet','cahier des charges'],
+    t: 'Expertises accessibles', big: 'Méthodes à la demande',
+    p: 'Planifier avec les principes PMP/PRINCE2, auditer avec de vraies méthodologies, rédiger un cahier des charges structuré : l\'IA applique les cadres, l\'humain garde le pilotage et la validation.',
+    s: 'Votre scène 3 (accès au savoir)' },
+  { k: ['cette presentation','moins d une heure','hier matin','comment vous avez fait','gsap','html'],
+    t: 'La mise en abyme', big: 'Hier matin, < 1 h',
+    p: 'Cette présentation (HTML autonome, animations, chiffres sourcés) a été conçue avec l\'IA en moins d\'une heure — c\'est la démonstration du propos. Méthode en open source via le QR code.',
+    s: 'Scène 17 + github.com/jniox/presentation-web-scroll-html-autonome' },
+];
+
+const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+/* ---- Correspondance approximative : tolère les erreurs de transcription ----
+   Ex. « openclaw » entendu « open cloud » : on compare aussi les mots concaténés,
+   avec une distance d'édition tolérée proportionnelle à la longueur du mot-clé. */
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  if (Math.abs(m - n) > 3) return 99;
+  const dp = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0]; dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+function fuzzyHas(textNorm, kw) {
+  if (textNorm.includes(kw)) return true;          // rapide : correspondance exacte
+  const target = kw.replace(/ /g, '');
+  if (target.length < 5) return false;             // mots courts : exact uniquement
+  const tol = Math.max(1, Math.round(target.length * 0.34));
+  const words = textNorm.split(/[^a-z0-9]+/).filter(Boolean);
+  const span = Math.min(kw.split(' ').length + 1, 3);
+  for (let i = 0; i < words.length; i++) {
+    let w = '';
+    for (let j = 0; j < span && i + j < words.length; j++) {
+      w += words[i + j];
+      if (w.length > target.length + 3) break;
+      if (lev(w, target) <= tol) return true;
+    }
+  }
+  return false;
+}
+
+/* ================= ÉTAT ================= */
+const $ = id => document.getElementById(id);
+let listening = false, recog = null, micStream = null, finalText = '', lastAnalyzedLen = 0;
+const shownFacts = new Map(); // index -> timestamp (cooldown)
+const settings = {
+  key: localStorage.getItem('qr_key') || '',
+  base: (localStorage.getItem('qr_base') || 'https://api.openai.com/v1').replace(/\/+$/, ''),
+  model: localStorage.getItem('qr_model') || 'gpt-4o-mini',
+  stt: localStorage.getItem('qr_stt') || 'whisper-1',
+  auto: localStorage.getItem('qr_auto') !== '0',
+  engine: localStorage.getItem('qr_engine') || 'whisper',
+  fc: localStorage.getItem('qr_fc') || '',
+  pplx: localStorage.getItem('qr_pplx') || ''
+};
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 4000);
+}
+function updatePills() {
+  $('pillMic').textContent = 'micro : ' + (listening ? 'ON' : 'off');
+  $('pillMic').className = 'pill' + (listening ? ' ok' : '');
+  const n = apiKeys().length;
+  $('pillIA').textContent = n ? ('IA : ' + settings.model + (n > 1 ? ' · ' + n + ' clés' : '')) : 'IA : non configurée';
+  $('pillIA').className = 'pill' + (n ? ' ok' : ' warn');
+  $('autoState').textContent = settings.auto && n ? 'auto ⚡' : '';
+}
+
+/* ---- Rotation de clés (round-robin + bascule sur limite 429) ---- */
+let keyIdx = 0;
+function apiKeys() { return settings.key.split(/[\s,;]+/).filter(Boolean); }
+function nextKey() { const k = apiKeys(); return k.length ? k[keyIdx++ % k.length] : ''; }
+async function apiFetch(url, opts) {
+  const tries = Math.max(1, Math.min(apiKeys().length, 4));
+  let r = null;
+  for (let a = 0; a < tries; a++) {
+    opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + nextKey() });
+    r = await fetch(url, opts);
+    if (r.status !== 429) return r;   // 429 = limite atteinte → on tente la clé suivante
+  }
+  return r;
+}
+
+/* ================= TRANSCRIPTION ================= */
+/* Le flux micro est capté UNE fois (getUserMedia) et gardé ouvert : une seule
+   demande d'autorisation par session, quel que soit le moteur de transcription. */
+async function startMic() {
+  if (!micStream) {
+    try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (e) { toast('Micro refusé — autorisez-le dans Chrome.'); return; }
+  }
+  listening = true;
+  const useWhisper = settings.key && settings.engine !== 'chrome';
+  if (useWhisper) startWhisper();
+  else {
+    if (settings.engine !== 'chrome' && !settings.key) toast('Sans clé OpenAI → reconnaissance Chrome (popups micro possibles).');
+    startWebSpeech();
+  }
+  $('btnMic').classList.add('on'); $('btnMic').textContent = '🎙 Écoute…';
+  startVU();
+  updatePills();
+}
+
+/* --- Moteur 1 : Whisper (API OpenAI) — segments de 7 s via MediaRecorder --- */
+let mediaRecorder = null, chunkTimer = null, pendingSTT = 0;
+function startWhisper() {
+  const seg = () => {
+    if (!listening || !micStream) return;
+    segPeak = 0;
+    let parts = [];
+    let mr;
+    try { mr = new MediaRecorder(micStream, { mimeType: 'audio/webm;codecs=opus' }); }
+    catch (_) { mr = new MediaRecorder(micStream); }
+    mediaRecorder = mr;
+    mr.ondataavailable = e => { if (e.data.size) parts.push(e.data); };
+    mr.onstop = () => {
+      const blob = new Blob(parts, { type: mr.mimeType || 'audio/webm' });
+      const peak = segPeak;
+      if (listening) seg();                       // enchaîne le segment suivant sans coupure
+      if (blob.size > 3000 && peak > 0.05) transcribeBlob(blob);  // ignore les silences
+    };
+    mr.start();
+    chunkTimer = setTimeout(() => { try { mr.stop(); } catch (_) {} }, 7000);
+  };
+  seg();
+}
+async function transcribeBlob(blob) {
+  pendingSTT++; renderTranscript('');
+  try {
+    const fd = new FormData();
+    fd.append('file', blob, 'segment.webm');
+    fd.append('model', settings.stt);
+    fd.append('language', 'fr');
+    const r = await apiFetch(settings.base + '/audio/transcriptions', { method: 'POST', body: fd });
+    if (!r.ok) throw new Error('HTTP ' + r.status + (r.status === 401 ? ' — clé invalide ?' : ''));
+    const j = await r.json();
+    const txt = (j.text || '').trim();
+    if (txt) { finalText += txt + ' '; lastSpeechAt = Date.now(); matchFacts(txt); }
+  } catch (err) {
+    toast('Transcription impossible : ' + err.message);
+  } finally {
+    pendingSTT--; renderTranscript('');
+  }
+}
+
+/* --- Moteur 2 : reconnaissance vocale Chrome (secours, sans clé) --- */
+function startWebSpeech() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Reconnaissance vocale non disponible — utilisez Chrome.'); listening = false; return; }
+  recog = new SR();
+  recog.lang = 'fr-FR'; recog.continuous = true; recog.interimResults = true;
+  recog.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const txt = e.results[i][0].transcript;
+      if (e.results[i].isFinal) { finalText += txt + ' '; lastSpeechAt = Date.now(); matchFacts(txt); }
+      else interim += txt;
+    }
+    renderTranscript(interim);
+  };
+  recog.onerror = e => { if (e.error === 'not-allowed') { toast('Micro refusé — autorisez-le dans Chrome.'); stopMic(); } };
+  recog.onend = () => { if (listening) { try { recog.start(); } catch (_) {} } };
+  try { recog.start(); } catch (_) {}
+}
+
+/* ---- Vumètre : témoin visuel du micro (+ mesure de pic par segment) ---- */
+let audioCtx = null, vuRaf = null, segPeak = 0;
+function startVU() {
+  if (!micStream) return;
+  try {
+    $('vu').classList.add('on');
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.6;
+    audioCtx.createMediaStreamSource(micStream).connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const bars = document.querySelectorAll('#vu span');
+    const loop = () => {
+      analyser.getByteFrequencyData(data);
+      bars.forEach((b, i) => {
+        const v = data[2 + i * 5] / 255;
+        if (v > segPeak) segPeak = v;
+        b.style.height = (4 + v * 20) + 'px';
+      });
+      vuRaf = requestAnimationFrame(loop);
+    };
+    loop();
+  } catch (_) {}
+}
+function stopVU() {
+  $('vu').classList.remove('on');
+  if (vuRaf) cancelAnimationFrame(vuRaf);
+  if (audioCtx) { try { audioCtx.close(); } catch (_) {} audioCtx = null; }
+}
+function stopMic() {
+  listening = false;
+  stopVU();
+  clearTimeout(chunkTimer);
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') { try { mediaRecorder.stop(); } catch (_) {} }
+  mediaRecorder = null;
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  if (recog) { recog.onend = null; try { recog.stop(); } catch (_) {} }
+  $('btnMic').classList.remove('on'); $('btnMic').textContent = '🎙 Écouter';
+  updatePills();
+}
+function renderTranscript(interim) {
+  const el = $('transcript');
+  const tail = finalText.slice(-4000);
+  el.innerHTML = '<span class="seg"></span><span class="interim"></span>';
+  el.firstChild.textContent = tail;
+  el.lastChild.textContent = interim || (pendingSTT > 0 ? ' … transcription en cours' : '');
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ================= CARTES ================= */
+function addCard(html, cls) {
+  const empty = $('empty'); if (empty) empty.remove();
+  const d = document.createElement('div');
+  d.className = 'card ' + cls; d.innerHTML = html;
+  d.dataset.cid = 'c' + Date.now() + '-' + (cardSeq++);
+  $('cards').prepend(d);
+  while ($('cards').children.length > 30) $('cards').lastChild.remove();
+  publishCard(d);
+  return d;
+}
+
+/* ================= DIFFUSION EN DIRECT (pub/sub ntfy.sh, sans compte) =================
+   Admin : 📡 Direct → identifiant secret aléatoire + QR ; chaque carte est publiée.
+   Public : ?v=<uid> → lecture seule, flux des cartes en temps réel + historique 12 h. */
+const VIEW = new URLSearchParams(location.search).get('v');
+let live = false, cardSeq = 0;
+const topicOf = id => 'senreact-direct-' + id;
+
+function publishCard(el) {
+  if (!live || VIEW || !el.dataset.cid) return;
+  let payload = JSON.stringify({ cid: el.dataset.cid, cls: el.className, html: el.innerHTML });
+  if (payload.length > 3900) {   // limite ntfy ~4 Ko : on retire le croisement si trop gros
+    const tmp = el.cloneNode(true);
+    const b = tmp.querySelector('.xs-box'); if (b) b.remove();
+    payload = JSON.stringify({ cid: el.dataset.cid, cls: el.className, html: tmp.innerHTML.slice(0, 3500) });
+  }
+  fetch('https://ntfy.sh/' + topicOf(localStorage.getItem('qr_uid')), { method: 'POST', body: payload }).catch(() => {});
+}
+
+$('btnLive').onclick = () => {
+  live = !live;
+  if (live) {
+    let uid = localStorage.getItem('qr_uid');
+    if (!uid) {
+      uid = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem('qr_uid', uid);
+    }
+    const url = location.origin + location.pathname + '?v=' + uid;
+    $('lbUrl').textContent = url;
+    $('lbQr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=1&data=' + encodeURIComponent(url);
+    $('liveBar').classList.add('on');
+    $('btnLive').classList.add('on'); $('btnLive').textContent = '📡 Direct ON';
+    toast('Diffusion activée — chaque carte est publiée en direct.');
+  } else {
+    $('liveBar').classList.remove('on');
+    $('btnLive').classList.remove('on'); $('btnLive').textContent = '📡 Direct';
+    toast('Diffusion arrêtée.');
+  }
+};
+
+if (VIEW) {
+  document.body.classList.add('viewer');
+  document.title = 'SenReact — Réponses en direct';
+  $('colHint').textContent = 'diffusion en direct';
+  $('empty').innerHTML = '<span class="live-dot"></span>Connecté au direct — les réponses apparaissent ici en temps réel.';
+  const url = location.origin + location.pathname + '?v=' + VIEW;
+  $('lbUrl').textContent = url;
+  $('lbQr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=1&data=' + encodeURIComponent(url);
+  $('liveBar').classList.add('on');
+  const seen = {};
+  const es = new EventSource('https://ntfy.sh/' + topicOf(VIEW) + '/sse?since=12h');
+  es.onmessage = ev => {
+    try {
+      const n = JSON.parse(ev.data);
+      if (!n.message) return;
+      const c = JSON.parse(n.message);
+      if (!c.cid) return;
+      if (seen[c.cid]) { seen[c.cid].innerHTML = c.html; }
+      else {
+        const empty = $('empty'); if (empty) empty.remove();
+        const d = document.createElement('div');
+        d.className = c.cls; d.dataset.cid = c.cid; d.innerHTML = c.html;
+        $('cards').prepend(d);
+        seen[c.cid] = d;
+      }
+    } catch (_) {}
+  };
+}
+function matchFacts(text) {
+  const t = norm(text);
+  FACTS.forEach((f, i) => {
+    const last = shownFacts.get(i) || 0;
+    if (Date.now() - last < 180000) return; // cooldown 3 min
+    if (f.k.some(kw => fuzzyHas(t, kw))) {
+      shownFacts.set(i, Date.now());
+      addCard(`<div class="tag">Votre fait sourcé</div><h3>${f.t}</h3><div class="big">${f.big}</div><p>${f.p}</p><div class="src">Source : <strong>${f.s}</strong></div>`, 'fact');
+    }
+  });
+}
+
+/* ================= ANALYSE IA (OpenAI) ================= */
+async function analyze(textOverride) {
+  if (!apiKeys().length) { toast('Ajoutez votre clé API dans ⚙ pour l\'analyse IA.'); return; }
+  let payload;
+  if (textOverride) {
+    payload = 'DERNIER PROPOS À ANALYSER :\n' + textOverride;
+  } else {
+    const newPart = (finalText.slice(lastAnalyzedLen).trim() || finalText.slice(-1200).trim());
+    if (!newPart || newPart.length < 15) { toast('Pas assez de texte à analyser.'); return; }
+    /* Le contexte antérieur aide le modèle à comprendre le fil, sans être ré-analysé */
+    const before = finalText.slice(Math.max(0, lastAnalyzedLen - 1500), lastAnalyzedLen).trim();
+    payload = (before ? 'CONTEXTE ANTÉRIEUR (pour comprendre le fil — ne pas ré-analyser) :\n' + before + '\n\n' : '')
+            + 'DERNIER PROPOS À ANALYSER :\n' + newPart;
+    lastAnalyzedLen = finalText.length;
+  }
+  const btn = $('btnAnalyse'); btn.disabled = true; btn.textContent = '… analyse';
+  try {
+    const r = await apiFetch(settings.base + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: settings.model,
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: `Tu es l'assistant de plateau de James NIOX, panéliste au lancement de senreact.com (Dakar, 2026) sur « l'IA et la transition numérique comme levier de l'entrepreneuriat des jeunes ». On te donne un extrait de la séance de questions-réponses (transcription imparfaite). Ta mission : l'aider à APPUYER ses réponses, jamais à trancher vrai/faux.
+
+Réponds en JSON strict : {"items":[{"sujet":"...","appuis":["..."],"sources":[{"nom":"institution/étude, année","recherche":"requête web précise pour la retrouver"}],"prudence":"..."}]}
+
+Règles :
+- Analyse UNIQUEMENT le « DERNIER PROPOS » ; le « CONTEXTE ANTÉRIEUR » sert seulement à comprendre de quoi on parle.
+- 1 à 3 items maximum, uniquement sur les sujets substantiels de l'extrait (ignore les banalités).
+- Si le dernier propos est un fragment sans substance (hésitation, transition, politesse), réponds {"items":[]}.
+- "appuis" : 2-3 arguments ou chiffres connus utilisables à l'oral, formulés en une phrase chacun.
+- "sources" : institutions réelles et vérifiables (ONU, Banque Mondiale, ANSD, OIT, GSMA, UNESCO, études nommées...) avec l'année. N'invente JAMAIS de chiffre précis dont tu n'es pas sûr — donne plutôt l'ordre de grandeur et la source à consulter.
+- "prudence" : ce qu'il ne faut PAS affirmer sans vérifier (ou "" si rien).
+- Contexte utile : le panéliste défend une méthode de contrôle basé sur le risque (exiger les sources, croiser les IA, tester le livrable, vérifier les points critiques). Public : ONG, jeunes entrepreneurs, institutions, Sénégal.` },
+          { role: 'user', content: payload.slice(0, 4800) }
+        ]
+      })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status + (r.status === 401 ? ' — clé invalide ?' : ''));
+    const data = await r.json();
+    const out = JSON.parse(data.choices[0].message.content);
+    (out.items || []).forEach((it, cardIdx) => {
+      const appuis = (it.appuis || []).map(a => `<li>${a}</li>`).join('');
+      const srcs = (it.sources || []).map(s =>
+        `<li>🟢 ${s.nom} — <a href="https://www.google.com/search?q=${encodeURIComponent(s.recherche || s.nom)}" target="_blank">chercher ↗</a></li>`).join('');
+      const q = (it.sources && it.sources[0] && it.sources[0].recherche) || it.sujet || '';
+      const el = addCard(`<div class="tag">Analyse IA — à vérifier</div><h3>${it.sujet || ''}</h3>
+        ${appuis ? '<ul>' + appuis + '</ul>' : ''}
+        ${srcs ? '<div class="src">Sources à citer :</div><ul>' + srcs + '</ul>' : ''}
+        ${it.prudence ? '<div class="caution">⚠ ' + it.prudence + '</div>' : ''}
+        ${q ? '<button class="xsrc" data-q="' + q.replace(/"/g, '&quot;') + '" title="relancer le croisement">🔎</button>' : ''}`, 'ia');
+      /* Croisement automatique : immersif, aucun clic — décalé pour ménager les API */
+      const b = el.querySelector('.xsrc');
+      if (b) setTimeout(() => { if (document.contains(b)) b.click(); }, 300 + cardIdx * 1200);
+    });
+    if (!(out.items || []).length) toast('Rien de substantiel à appuyer dans ce passage.');
+  } catch (err) {
+    toast('Analyse impossible : ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '⚡ Analyser maintenant';
+  }
+}
+
+/* ================= CROISEMENT DE SOURCES (APIs publiques, sans clé) =================
+   Wikipédia, GitHub, HackerNews et GDELT (presse mondiale) sont interrogeables en
+   direct. X / LinkedIn / Medium n'ont pas d'API publique → liens de recherche
+   pré-remplis. Tout est étiqueté « non vérifié » : ouvrir avant de citer. */
+const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+async function crossSearch(q, box) {
+  box.innerHTML = '<em class="xs-load">recherche croisée en cours…</em>';
+  const enc = encodeURIComponent(q);
+  const to = () => AbortSignal.timeout(7000);   // 7 s max par source
+  const jobs = [
+    fetch('https://fr.wikipedia.org/w/api.php?action=query&list=search&srsearch=' + enc + '&format=json&origin=*&srlimit=3', { signal: to() })
+      .then(r => r.json()).then(j => (j.query.search || []).map(x =>
+        ({ s: 'Wikipédia', t: x.title, u: 'https://fr.wikipedia.org/wiki/' + encodeURIComponent(x.title.replace(/ /g, '_')), d: '' }))),
+    fetch('https://api.github.com/search/repositories?q=' + enc + '&sort=stars&per_page=3', { signal: to() })
+      .then(r => r.json()).then(j => (j.items || []).map(x =>
+        ({ s: 'GitHub', t: x.full_name + ' ★' + x.stargazers_count, u: x.html_url, d: (x.description || '').slice(0, 90) }))),
+    fetch('https://hn.algolia.com/api/v1/search?query=' + enc + '&hitsPerPage=3', { signal: to() })
+      .then(r => r.json()).then(j => (j.hits || []).filter(x => x.title).map(x =>
+        ({ s: 'HackerNews', t: x.title, u: x.url || ('https://news.ycombinator.com/item?id=' + x.objectID), d: (x.created_at || '').slice(0, 10) }))),
+    fetch('https://api.gdeltproject.org/api/v2/doc/doc?query=' + enc + '&mode=artlist&maxrecords=4&format=json', { signal: to() })
+      .then(r => r.json()).then(j => (j.articles || []).map(x =>
+        ({ s: 'Presse', t: x.title, u: x.url, d: (x.seendate || '').slice(0, 4) + '-' + (x.seendate || '').slice(4, 6) + '-' + (x.seendate || '').slice(6, 8) })))
+  ];
+  /* Firecrawl (optionnel) : vraie recherche web — débloque Medium, blogs, souvent Reddit */
+  let fcNote = '';
+  if (settings.fc) {
+    jobs.push((async () => {
+      try {
+        const opts = key => ({ method: 'POST', signal: to(),
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + settings.fc },
+          body: JSON.stringify({ query: q, limit: 5 }) });
+        let r = await fetch('https://api.firecrawl.dev/v1/search', opts());
+        if (r.status === 404) r = await fetch('https://api.firecrawl.dev/v2/search', opts());
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        const arr = Array.isArray(j.data) ? j.data : ((j.data && j.data.web) || []);
+        return arr.map(x => ({ s: 'Web', t: x.title || x.url, u: x.url, d: (x.description || '').slice(0, 90) }));
+      } catch (e) { fcNote = ' · Firecrawl indisponible (' + e.message + ')'; return []; }
+    })());
+  }
+  /* Perplexity (optionnel) : recherche web avec citations — API Search, repli sur sonar */
+  if (settings.pplx) {
+    jobs.push((async () => {
+      try {
+        const h = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + settings.pplx };
+        let r = await fetch('https://api.perplexity.ai/search', {
+          method: 'POST', headers: h, signal: to(),
+          body: JSON.stringify({ query: q, max_results: 5 })
+        });
+        if (r.ok) {
+          const j = await r.json();
+          return (j.results || []).map(x => ({ s: 'Perplexity', t: x.title || x.url, u: x.url, d: (x.date || x.snippet || '').slice(0, 90) }));
+        }
+        /* Repli : modèle sonar (chat) qui renvoie ses résultats de recherche */
+        r = await fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST', headers: h, signal: to(),
+          body: JSON.stringify({ model: 'sonar', messages: [{ role: 'user', content: q }], max_tokens: 60 })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        return (j.search_results || (j.citations || []).map(u => ({ url: u })) || []).slice(0, 5)
+          .map(x => ({ s: 'Perplexity', t: x.title || x.url, u: x.url, d: (x.date || '').slice(0, 10) }));
+      } catch (e) { fcNote += ' · Perplexity indisponible (' + e.message + ')'; return []; }
+    })());
+  }
+  const res = await Promise.allSettled(jobs);
+  const items = res.flatMap(r => r.status === 'fulfilled' ? r.value : []).slice(0, 15);
+  /* Drapeaux de fiabilité par origine : 🟢 institutionnel · 🟡 à croiser · 🔴 communautaire */
+  const FLAG = { 'Wikipédia': '🟡', 'GitHub': '🟡', 'HackerNews': '🔴', 'Presse': '🟡', 'Web': '🟡', 'Perplexity': '🟡' };
+  const links = '<div class="xs-links">Chercher aussi : ' +
+    '<a href="https://x.com/search?q=' + enc + '" target="_blank">🔴 X</a> · ' +
+    '<a href="https://www.reddit.com/search/?q=' + enc + '" target="_blank">🔴 Reddit</a> · ' +
+    '<a href="https://www.linkedin.com/search/results/content/?keywords=' + enc + '" target="_blank">🟡 LinkedIn</a> · ' +
+    '<a href="https://medium.com/search?q=' + enc + '" target="_blank">🟡 Medium</a> · ' +
+    '<a href="https://www.google.com/search?q=' + enc + '" target="_blank">Google</a></div>';
+  box.innerHTML = (items.length
+    ? '<div class="xs-warn">Fiabilité : 🟢 institutionnel · 🟡 média / encyclopédie / code — à croiser · 🔴 communautaire — indicatif. Ouvrez avant de citer.' + fcNote + '</div><ul>' +
+      items.map(i => '<li>' + (FLAG[i.s] || '🟡') + ' <span class="xs-badge">' + i.s + '</span> <a href="' + esc(i.u) + '" target="_blank">' + esc(i.t) + '</a>' +
+        (i.d ? ' <span class="xs-d">' + esc(i.d) + '</span>' : '') + '</li>').join('') + '</ul>'
+    : '<div class="xs-warn">Aucun résultat direct sur les sources interrogées.' + fcNote + '</div>') + links;
+  publishCard(box.closest('.card'));   // met à jour la carte côté public avec les sources croisées
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.xsrc'); if (!b) return;
+  const card = b.closest('.card');
+  let box = card.querySelector('.xs-box');
+  if (!box) { box = document.createElement('div'); box.className = 'xs-box'; card.appendChild(box); }
+  crossSearch(b.dataset.q, box);
+});
+
+/* Auto-analyse : attend une pensée complète avant de chercher.
+   Déclenche quand ≥ ~2 phrases se sont accumulées ET que l'orateur marque une
+   pause (fin de question) — ou sans attendre si le monologue devient long. */
+let lastSpeechAt = 0;
+setInterval(() => {
+  if (!settings.auto || !apiKeys().length || !listening) return;
+  const fresh = finalText.length - lastAnalyzedLen;   // texte pas encore analysé
+  const quiet = Date.now() - lastSpeechAt;            // silence depuis la dernière parole
+  if (fresh >= 80 && quiet >= 4500) analyze();        // phrase complète + pause marquée
+  else if (fresh >= 700) analyze();                   // longue tirade : on n'attend plus
+}, 5000);
+
+/* ================= UI ================= */
+$('btnMic').onclick = () => listening ? stopMic() : startMic();
+$('btnAnalyse').onclick = () => analyze();
+$('btnClear').onclick = () => {
+  finalText = ''; lastAnalyzedLen = 0; shownFacts.clear();
+  $('transcript').innerHTML = ''; $('cards').innerHTML = '<div id="empty">Effacé. Prêt.</div>';
+};
+$('btnExport').onclick = () => {
+  const cards = [...document.querySelectorAll('.card')].map(c => c.innerText).reverse().join('\n\n---\n\n');
+  const blob = new Blob(['TRANSCRIPTION\n\n' + finalText + '\n\n==== CARTES ====\n\n' + cards], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'session-QR-senreact.txt'; a.click();
+};
+$('manual').onsubmit = e => {
+  e.preventDefault();
+  const v = $('manualInput').value.trim(); if (!v) return;
+  finalText += ' [saisie] ' + v + ' ';
+  renderTranscript('');
+  matchFacts(v);
+  if (settings.key) analyze(v);
+  $('manualInput').value = '';
+};
+$('btnSettings').onclick = () => {
+  $('setKey').value = settings.key; $('setModel').value = settings.model; $('setAuto').checked = settings.auto;
+  $('setEngine').value = settings.engine;
+  $('setBase').value = settings.base; $('setStt').value = settings.stt; $('setFc').value = settings.fc;
+  $('setPplx').value = settings.pplx;
+  $('settings').classList.add('open');
+};
+$('setClose').onclick = () => $('settings').classList.remove('open');
+$('setSave').onclick = () => {
+  settings.key = $('setKey').value.trim();
+  settings.base = ($('setBase').value.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
+  settings.model = $('setModel').value.trim() || 'gpt-4o-mini';
+  settings.stt = $('setStt').value.trim() || 'whisper-1';
+  settings.auto = $('setAuto').checked;
+  settings.engine = $('setEngine').value;
+  settings.fc = $('setFc').value.trim();
+  settings.pplx = $('setPplx').value.trim();
+  localStorage.setItem('qr_fc', settings.fc);
+  localStorage.setItem('qr_pplx', settings.pplx);
+  localStorage.setItem('qr_key', settings.key);
+  localStorage.setItem('qr_base', settings.base);
+  localStorage.setItem('qr_model', settings.model);
+  localStorage.setItem('qr_stt', settings.stt);
+  localStorage.setItem('qr_auto', settings.auto ? '1' : '0');
+  localStorage.setItem('qr_engine', settings.engine);
+  $('settings').classList.remove('open'); updatePills();
+  if (listening) { stopMic(); toast('Réglages enregistrés — relancez 🎙 Écouter.'); }
+  else toast('Réglages enregistrés.');
+};
+updatePills();
+</script>
+</body>
+</html>
